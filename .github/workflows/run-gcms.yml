@@ -1,7 +1,9 @@
 name: GCMS Playwright Automation
 
 on:
-  workflow_dispatch:      # permite rodar manualmente
+  schedule:
+    - cron: "0 21 * * 5"   # sexta-feira 18:00 (UTC-3)
+  workflow_dispatch:        # também permite rodar manual
 
 jobs:
   run-gcms:
