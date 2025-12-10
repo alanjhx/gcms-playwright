@@ -3,15 +3,19 @@ name: GCMS Playwright Automation
 on:
   schedule:
     - cron: "0 21 * * 5"   # sexta-feira 18:00 (UTC-3)
-  workflow_dispatch:        # permite rodar manualmente
+  workflow_dispatch:
 
 jobs:
   run-gcms:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write   # ← PERMISSÃO PARA COMMITAR
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # precisa disso para fazer push depois
 
       - name: Setup Python
         uses: actions/setup-python@v4
@@ -29,3 +33,20 @@ jobs:
           PROJETO_CSV: "Lista de Projetos.csv"
         run: |
           python src/main.py
+
+      - name: Commit and push downloaded files
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Adiciona os arquivos baixados (pasta downloads/)
+          git add downloads/*
+
+          # Checa se há mudanças
+          if git diff --cached --quiet; then
+            echo "Nenhum arquivo novo ou modificado — nada para commitar."
+          else
+            git commit -m "Atualização automática: novos CostSheet e CashFlow (Playwright)"
+            git push
+            echo "Commit enviado com sucesso."
+          fi
