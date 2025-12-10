@@ -72,7 +72,7 @@ def abrir_projeto(page: Page, numero_projeto: str) -> bool:
     print(f"Abrindo projeto: {numero_projeto}")
  
     # Botão "+"
-    botao_mais = page.locator("xpath=//*[@id='openTabsBtn']/button")
+    botao_mais = page.locator("page.locator('oj-button#openTabsBtn button').click()")
     if botao_mais.count() == 0:
         print("[ERRO] Botão '+' não encontrado.")
         return False
