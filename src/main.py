@@ -13,23 +13,33 @@ def main():
 
     print(f"Lendo lista de projetos em: {caminho_csv}")
 
-    # Lê CSV sem cabeçalho, usando ";" como separador OU mantendo a coluna única
+    # Lê CSV sem cabeçalho, separado por ponto-e-vírgula
     df = pd.read_csv(caminho_csv, header=None, sep=";", engine="python")
 
-    # Primeira coluna: coluna 0
+    # Primeira coluna é a coluna 0
     projetos_brutos = df[0].astype(str).tolist()
 
-    # Limpa espaços, remove ponto-e-vírgula, remove vazios
+    # Limpeza da lista
     projetos = []
     for p in projetos_brutos:
-        p = p.strip().replace(";", "")
+        p = p.strip().replace(";", "").strip()
         if p != "":
             projetos.append(p)
 
     print("Projetos carregados:", projetos)
 
+    # Loop com tratamento de erro
     for numero in projetos:
-        executar_fluxo(numero_projeto=numero, base_url=base_url)
+        print("\n====================================================")
+        print(f"Iniciando fluxo para o projeto: {numero}")
+        print("====================================================\n")
+
+        sucesso = executar_fluxo(numero_projeto=numero, base_url=base_url)
+
+        if not sucesso:
+            print(f"[AVISO] Projeto {numero} ignorado (não encontrado ou erro).")
+        else:
+            print(f"[OK] Projeto {numero} executado com sucesso.")
 
 if __name__ == "__main__":
     main()
