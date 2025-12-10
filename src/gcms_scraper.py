@@ -1,197 +1,295 @@
 from playwright.sync_api import sync_playwright
+import time
 import os
 
+# ===============================================================
+# LOGIN NO GCMS / MICROSOFT
+# ===============================================================
+def realizar_login(page):
 
-# ====== FUNÇÃO AUXILIAR PARA SALVAR DOWNLOADS ======
+    print("Verificando se é necessário fazer login...")
 
-def salvar_download(download, nome_final: str):
-    """
-    Salva o arquivo baixado dentro da pasta 'downloads' com o nome desejado.
-    """
-    os.makedirs("downloads", exist_ok=True)
-    destino = os.path.join("downloads", nome_final)
+    # ==============================
+    # 1 — Tela "Insira a senha"
+    # ==============================
+    try:
+        senha_input = page.get_by_label("Senha", exact=True)
+        if senha_input:
+            print("Tela de senha detectada. Preenchendo senha...")
 
-    print(f"Salvando arquivo em: {destino}")
-    download.save_as(destino)
+            senha_input.fill("Alcoa1234@")
+
+            botao_entrar = page.get_by_role("button", name="Entrar")
+            botao_entrar.click()
+
+            page.wait_for_timeout(4000)
+    except:
+        print("Nenhuma tela de senha encontrada.")
+
+    # ==============================
+    # 2 — Tela "Continuar conectado?"
+    # ==============================
+    try:
+        botao_nao = page.get_by_role("button", name="Não")
+        if botao_nao:
+            print("Tela 'Continuar conectado?' detectada. Clicando NÃO...")
+            botao_nao.click()
+            page.wait_for_timeout(3000)
+    except:
+        print("Tela 'Continuar conectado?' não apareceu.")
+
+    print("Login concluído.")
 
 
-# ====== ETAPA 1 — ABRIR SISTEMA E PROJETO ======
+# ===============================================================
+# Função: abrir GCMS
+# ===============================================================
+def abrir_gcms(playwright, base_url):
+    browser = playwright.chromium.launch(headless=True)
+    context = browser.new_context(accept_downloads=True)
+    page = context.new_page()
 
-def abrir_unifier(page, base_url: str):
-    """
-    Abre o Primavera Unifier (GCMS) na URL base.
-    Considera que já estamos dentro da rede Alcoa (sem login).
-    """
-    print(f"Abrindo GCMS em: {base_url}")
-    page.goto(base_url)
-    page.wait_for_load_state("networkidle")
-    print("GCMS carregado.")
+    page.goto(base_url, timeout=60000)
+    print("Página do GCMS carregada.")
+
+    # Executar login automático
+    realizar_login(page)
+
+    return browser, context, page
 
 
-def abrir_projeto(page, numero_projeto: str):
-    """
-    Clicar no '+' → pesquisar pelo número do projeto → abrir o projeto.
-    """
+# ===============================================================
+# Função: abrir projeto pelo número
+# ===============================================================
+def abrir_projeto(page, numero_projeto):
+
     print(f"Abrindo projeto: {numero_projeto}")
 
-    # Ícone de "+" no topo (selector genérico – ajuste se necessário)
-    page.get_by_role("button", name="+").click()
+    # Abrir menu "+"
+    try:
+        page.get_by_role("button", name="+").click(timeout=7000)
+    except:
+        print("[ERRO] Não consegui clicar no botão '+'. Pulando projeto.")
+        return False
 
-    # Campo "Pesquisar por nome ou número..."
-    page.get_by_placeholder("Pesquisar por nome ou número").fill(numero_projeto)
+    # Preencher campo de busca
+    try:
+        campo = page.get_by_placeholder("Pesquisar por nome ou número...")
+        campo.fill(numero_projeto)
+    except:
+        print("[ERRO] Campo de pesquisa não encontrado.")
+        return False
 
-    # Espera um pouco para aparecer o resultado
-    page.wait_for_timeout(1000)
+    page.wait_for_timeout(2500)
 
-    # Clicar na linha que contém o número do projeto
-    page.get_by_text(numero_projeto, exact=False).click()
+    resultados = page.locator(f"text={numero_projeto}")
 
-    # Espera carregar o workspace do projeto
-    page.wait_for_load_state("networkidle")
-    print("Projeto aberto.")
+    try:
+        count = resultados.count()
+    except:
+        print("[ERRO] Falha ao ler resultados de busca.")
+        return False
 
+    if count == 0:
+        print(f"[AVISO] Nenhum resultado encontrado para {numero_projeto}.")
+        return False
 
-# ====== ETAPA 2 — COST SHEET: PROJECT COST SHEET ======
-
-def baixar_cost_sheet(page, numero_projeto: str):
-    """
-    Finance → Cost Sheet → Project Cost Sheet → Export to CSV.
-    Gera: CostSheet_{NumeroProjeto}.csv
-    """
-    print("Indo para Finance → Cost Sheet...")
-
-    # Menu Finance no lado esquerdo
-    page.get_by_text("Finance", exact=True).click()
-
-    # Submenu Cost Sheet
-    page.get_by_text("Cost Sheet", exact=True).click()
-    page.wait_for_load_state("networkidle")
-
-    # Duplo clique em "Project Cost Sheet"
-    print("Abrindo 'Project Cost Sheet'...")
-    page.get_by_text("Project Cost Sheet", exact=False).dblclick()
-    page.wait_for_load_state("networkidle")
-
-    # Botão de Print/Export (ícone de impressora/export)
-    print("Abrindo menu de exportação do Cost Sheet...")
-    # Aqui usamos o título do botão; ajuste se for diferente
-    page.get_by_role("button", name="Print").click()
-
-    # Selecionar "Export To CSV"
-    page.get_by_text("Export To CSV", exact=True).click()
-
-    print("Aguardando download do Cost Sheet...")
-    download = page.wait_for_event("download")
-    nome_final = f"CostSheet_{numero_projeto}.csv"
-    salvar_download(download, nome_final)
-    print("Cost Sheet baixado.")
+    # Clicar no primeiro resultado
+    try:
+        resultados.first.click(timeout=5000)
+        print(f"[OK] Projeto {numero_projeto} aberto.")
+        return True
+    except:
+        print(f"[ERRO] Não consegui clicar no projeto {numero_projeto}.")
+        return False
 
 
-# ====== ETAPA 3 — CASH FLOW: ACTUALS vs BASELINE ======
-
-def baixar_cashflow_actuals(page, numero_projeto: str):
-    """
-    Finance → Cash Flow → Actuals vs Baseline → Export to CSV (Actuals).
-    Gera: CashFlow_Actuals_{NumeroProjeto}.csv
-    """
-    print("Indo para Finance → Cash Flow (Actuals vs Baseline)...")
-
-    # Menu Cash Flow
-    page.get_by_text("Cash Flow", exact=True).click()
-    page.wait_for_load_state("networkidle")
-
-    # Duplo clique em "Actuals vs Baseline"
-    print("Abrindo 'Actuals vs Baseline'...")
-    page.get_by_text("Actuals vs Baseline", exact=False).dblclick()
-    page.wait_for_load_state("networkidle")
-
-    # Painel de curvas (All Curves) → três pontinhos
-    print("Abrindo menu de curvas (três pontinhos)...")
-    # Selector genérico para os "..." (pode precisar de ajuste fino)
-    page.get_by_role("button", name="More options").click()
-
-    # Selecionar "Actuals"
-    print("Selecionando curva 'Actuals'...")
-    page.get_by_text("Actuals", exact=False).click()
-
-    # Botão de exportação (ícone de download)
-    print("Exportando 'Actuals vs Baseline' para CSV...")
-    page.get_by_role("button", name="Export").click()
-    page.get_by_text("Export To CSV", exact=True).click()
-
-    print("Aguardando download do Cash Flow Actuals...")
-    download = page.wait_for_event("download")
-    nome_final = f"CashFlow_Actuals_{numero_projeto}.csv"
-    salvar_download(download, nome_final)
-    print("Cash Flow Actuals baixado.")
-
-    # Fechar aba interna (X)
-    print("Fechando aba de 'Actuals vs Baseline'...")
-    page.get_by_role("button", name="Close").click()
+# ===============================================================
+# Função auxiliar: clique seguro
+# ===============================================================
+def safe_click(page, description, locator):
+    try:
+        locator.click(timeout=7000)
+        return True
+    except:
+        print(f"[ERRO] Não consegui clicar em: {description}")
+        return False
 
 
-# ====== ETAPA 4 — CASH FLOW: FORECAST (Cash Flow by CBS) ======
+# ===============================================================
+# Baixar Cost Sheet
+# ===============================================================
+def baixar_cost_sheet(page, numero):
 
-def baixar_cashflow_forecast(page, numero_projeto: str):
-    """
-    Finance → Cash Flow → Cash Flow by CBS → Forecast → Export to CSV.
-    Gera: CashFlow_Forecast_{NumeroProjeto}.csv
-    """
-    print("Indo para 'Cash Flow by CBS'...")
+    print("→ Baixando Cost Sheet...")
 
-    # Estando ainda em Cash Flow, tela de lista
-    page.get_by_text("Cash Flow by CBS", exact=False).dblclick()
-    page.wait_for_load_state("networkidle")
+    try:
+        page.get_by_role("treeitem", name="Cost Sheet").click(timeout=6000)
+        page.wait_for_timeout(1500)
+    except:
+        print("[ERRO] Não consegui acessar Cost Sheet.")
+        return False
 
-    # Painel de curvas → três pontinhos
-    print("Abrindo menu de curvas (três pontinhos) para Forecast...")
-    page.get_by_role("button", name="More options").click()
+    item = page.locator("text=Project Cost Sheet").first
+    if not safe_click(page, "Project Cost Sheet", item):
+        return False
 
-    # Selecionar "Forecast"
-    print("Selecionando curva 'Forecast'...")
-    page.get_by_text("Forecast", exact=False).click()
+    page.wait_for_timeout(2000)
 
     # Botão de exportação
-    print("Exportando 'Cash Flow by CBS - Forecast' para CSV...")
-    page.get_by_role("button", name="Export").click()
-    page.get_by_text("Export To CSV", exact=True).click()
+    try:
+        export_btn = page.locator("button").filter(has_text="Print").nth(0)
+        export_btn.click(timeout=6000)
+    except:
+        print("[ERRO] Não consegui abrir menu de exportação.")
+        return False
 
-    print("Aguardando download do Cash Flow Forecast...")
-    download = page.wait_for_event("download")
-    nome_final = f"CashFlow_Forecast_{numero_projeto}.csv"
-    salvar_download(download, nome_final)
-    print("Cash Flow Forecast baixado.")
+    # Exportar CSV
+    try:
+        with page.expect_download() as download_info:
+            page.locator("text=Export To CSV").click()
+        download = download_info.value
 
-    # Fechar aba interna (X)
-    print("Fechando aba de 'Cash Flow by CBS'...")
-    page.get_by_role("button", name="Close").click()
+        os.makedirs("downloads", exist_ok=True)
+        download.save_as(f"downloads/CostSheet_{numero}.csv")
+
+        print(f"[OK] CostSheet salvo: downloads/CostSheet_{numero}.csv")
+        return True
+    except:
+        print("[ERRO] Falha ao exportar CostSheet.")
+        return False
 
 
-# ====== FUNÇÃO PRINCIPAL PARA UM PROJETO ======
+# ===============================================================
+# Baixar Cash Flow → Actuals
+# ===============================================================
+def baixar_cashflow_actuals(page, numero):
 
-def executar_fluxo(numero_projeto: str, base_url: str):
-    """
-    Executa o fluxo completo para UM projeto:
-    - abre GCMS
-    - abre projeto
-    - baixa Cost Sheet
-    - baixa Cash Flow Actuals
-    - baixa Cash Flow Forecast
-    """
-    print("=" * 80)
-    print(f"Iniciando fluxo para o projeto: {numero_projeto}")
-    print("=" * 80)
+    print("→ Baixando Cash Flow Actuals...")
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        context = browser.new_context(accept_downloads=True)
-        page = context.new_page()
+    try:
+        page.get_by_role("treeitem", name="Cash Flow").click(timeout=6000)
+        page.wait_for_timeout(1500)
+    except:
+        print("[ERRO] Não consegui abrir Cash Flow.")
+        return False
 
-        abrir_unifier(page, base_url)
-        abrir_projeto(page, numero_projeto)
-        baixar_cost_sheet(page, numero_projeto)
-        baixar_cashflow_actuals(page, numero_projeto)
-        baixar_cashflow_forecast(page, numero_projeto)
+    item = page.locator("text=Actuals vs Baseline").first
+    if not safe_click(page, "Actuals vs Baseline", item):
+        return False
 
-        browser.close()
-        print(f"Fluxo concluído para o projeto: {numero_projeto}")
+    page.wait_for_timeout(2000)
+
+    # Botão "..."
+    try:
+        tres = page.locator("button").filter(has_text="...").nth(0)
+        tres.click(timeout=6000)
+    except:
+        print("[ERRO] Não consegui abrir menu de curvas.")
+        return False
+
+    # Selecionar curva Actuals
+    try:
+        page.locator("text=Actual").first.click(timeout=5000)
+    except:
+        print("[ERRO] Curva 'Actual' não encontrada.")
+        return False
+
+    # Exportar CSV
+    try:
+        with page.expect_download() as download_info:
+            page.locator("text=Export").first.click()
+        download = download_info.value
+
+        os.makedirs("downloads", exist_ok=True)
+        download.save_as(f"downloads/CashFlow_Actuals_{numero}.csv")
+
+        print(f"[OK] Actuals salvo: downloads/CashFlow_Actuals_{numero}.csv")
+        return True
+    except:
+        print("[ERRO] Falha ao exportar Actuals.")
+        return False
+
+
+# ===============================================================
+# Baixar Cash Flow → Forecast
+# ===============================================================
+def baixar_cashflow_forecast(page, numero):
+
+    print("→ Baixando Cash Flow Forecast...")
+
+    try:
+        page.get_by_role("treeitem", name="Cash Flow").click(timeout=6000)
+        page.wait_for_timeout(1500)
+    except:
+        print("[ERRO] Não consegui abrir Cash Flow.")
+        return False
+
+    item = page.locator("text=Cash Flow by CBS").first
+    if not safe_click(page, "Cash Flow by CBS", item):
+        return False
+
+    page.wait_for_timeout(2000)
+
+    # Botão "..."
+    try:
+        tres = page.locator("button").filter(has_text="...").nth(0)
+        tres.click(timeout=6000)
+    except:
+        print("[ERRO] Não consegui abrir menu de curvas.")
+        return False
+
+    # Selecionar Forecast
+    try:
+        page.locator("text=Forecast").first.click(timeout=5000)
+    except:
+        print("[ERRO] Curva Forecast não encontrada.")
+        return False
+
+    # Exportar CSV
+    try:
+        with page.expect_download() as download_info:
+            page.locator("text=Export").first.click()
+        download = download_info.value
+
+        os.makedirs("downloads", exist_ok=True)
+        download.save_as(f"downloads/CashFlow_Forecast_{numero}.csv")
+
+        print(f"[OK] Forecast salvo: downloads/CashFlow_Forecast_{numero}.csv")
+        return True
+    except:
+        print("[ERRO] Falha ao exportar Forecast.")
+        return False
+
+
+# ===============================================================
+# Função principal por projeto
+# ===============================================================
+def executar_fluxo(numero_projeto, base_url):
+
+    print("\n==============================================")
+    print(f"EXECUTANDO PROJETO: {numero_projeto}")
+    print("==============================================\n")
+
+    try:
+        with sync_playwright() as pw:
+            browser, context, page = abrir_gcms(pw, base_url)
+
+            # Tentar abrir projeto
+            if not abrir_projeto(page, numero_projeto):
+                print(f"[AVISO] Projeto {numero_projeto} ignorado.")
+                context.close()
+                browser.close()
+                return False
+
+            baixar_cost_sheet(page, numero_projeto)
+            baixar_cashflow_actuals(page, numero_projeto)
+            baixar_cashflow_forecast(page, numero_projeto)
+
+            context.close()
+            browser.close()
+            return True
+
+    except Exception as e:
+        print(f"[ERRO] Erro crítico no projeto {numero_projeto}: {e}")
+        return False
