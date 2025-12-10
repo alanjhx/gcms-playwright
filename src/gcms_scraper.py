@@ -136,7 +136,9 @@ def abrir_projeto(page: Page, numero_projeto: str) -> bool:
 
     # Botão "+"
 
-    botao_mais = page.locator("xpath=//*[@id='openTabsBtn']/button")
+    botao_mais = page.locator("<oj-button display="icons" id="openTabsBtn" class="oj-flex-bar-end oj-button oj-button-half-chrome oj-button-icon-only oj-enabled oj-complete oj-default" on-oj-action="[[showShellHierarchy]]" title="New tab"><button aria-labelledby="openTabsBtn_oj78|text" class="oj-button-button" tabindex="0"><div class="oj-button-label"><span class="oj-button-icon oj-start"><span slot="startIcon" class="oj-ux-ico-plus oj-ux-icon-size-4x" style="color:white;font-weight: 400;"></span></span><span id="openTabsBtn_oj78|text" class="oj-button-text oj-helper-hidden-accessible"><span class="">
+                      <!--oj-bind-text value='[[label.switchTab]]'--><!--ko text:label.switchTab-->New tab<!--/ko--><!--/oj-bind-text-->
+                    </span></span></div></button></oj-button> ")
 
     if botao_mais.count() == 0:
 
