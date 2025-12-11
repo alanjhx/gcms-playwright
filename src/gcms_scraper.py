@@ -83,7 +83,7 @@ def abrir_projeto(page, projeto):
     print(f"[abrir] {projeto}")
 
     # Botão "+"
-    if not deep_click(page, "oj-button#openTabsBtn button"):
+    if not deep_click(page, "#openTabsBtn > button"):
         print("Botão '+' não encontrado.")
         return False
 
