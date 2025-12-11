@@ -34,7 +34,7 @@ jobs:
         env:
           GCMS_URL: ${{ secrets.GCMS_URL }}
           GCMS_PASSWORD: ${{ secrets.GCMS_PASSWORD }}
-          PROJETO_CSV: "Lista.csv"
+          PROJETO_CSV: "Lista de Projetos.csv"
         run: |
           Xvfb :99 -screen 0 1920x1080x24 &
           export DISPLAY=:99
